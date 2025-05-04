@@ -9,18 +9,16 @@ import org.eclipse.jdt.core.dom.Type;
 import java.util.ArrayList;
 import java.util.List;
 
-public class Code {
-    StringBuilder sb = new StringBuilder();
-    int level = 0;
-    String indent = "";
-    List<String> usings = new ArrayList<>();
-    boolean rust = false;
+public class CodeBuilder {
+    private final StringBuilder sb = new StringBuilder();
+    private int level = 0;
+    private String indent = "";
+    private final List<String> usings = new ArrayList<>();
+    public boolean rust = false; // modo de saída Rust
 
-    void init() {
-        indent = "";
-        for (int i = 0; i < level; i++) {
-            indent = indent + "    ";
-        }
+    private void init() {
+        // Java 11+: repete o indentador "    " pelo nível atual
+        indent = "    ".repeat(Math.max(0, level));
     }
 
     public void up() {
@@ -29,29 +27,36 @@ public class Code {
     }
 
     public void down() {
-        level--;
+        level = Math.max(0, level - 1);
         init();
     }
 
     public void clear() {
         sb.setLength(0);
+        level = 0;
+        init();
     }
 
-    String str(ITypeBinding b) {
+    private String str(ITypeBinding b) {
         if (rust) {
             return mapType(b);
         }
-        if (b.getName().equals("void")) return "void";
+
+        if ("void".equals(b.getName())) return "void";
+
         if (b.isTypeVariable()) {
             return TypeHelper.getObjectType().toString();
         }
 
         CType ct = TypeVisitor.fromBinding(b);
-        if (Config.full) ct.typeNames.clear();
+        if (Config.full) {
+            ct.typeNames.clear();
+        }
+
         String s = ct.toString();
         for (String u : usings) {
             if (s.startsWith(u)) {
-                return s.substring(u.length() + 2);
+                return s.substring(u.length() + 2); // remove namespace usado
             }
         }
         return s;
@@ -61,13 +66,12 @@ public class Code {
         write(str(b));
     }
 
-    String format(String s, Object... args) {
+    private String format(String s, Object... args) {
         if (args.length != 0) {
             for (int i = 0; i < args.length; i++) {
                 if (args[i] instanceof ITypeBinding type) {
                     args[i] = str(type);
-                }
-                else if (args[i] instanceof Type type) {
+                } else if (args[i] instanceof Type type) {
                     args[i] = mapType(type);
                 }
             }
@@ -79,49 +83,47 @@ public class Code {
     public void write(String s, Object... args) {
         s = format(s, args);
         sb.append(s);
-        if (s.trim().endsWith("{")) up();
+        if (s.trim().endsWith("{")) {
+            up();
+        }
     }
 
     public void line(String s, Object... args) {
-        if (s.trim().endsWith("}")) down();
+        if (s.trim().endsWith("}")) {
+            down();
+        }
         sb.append(indent);
         write(s, args);
+        sb.append("\n");
     }
 
     public String mapType(Type type) {
-        if (rust) {
-            return RustHelper.mapType(type);
-        }
-        else {
-            return type.toString();
-        }
+        return rust ? RustHelper.mapType(type) : type.toString();
     }
 
     public String mapType(ITypeBinding type) {
-        if (rust) {
-            return RustHelper.mapType(type);
-        }
-        else {
-            return type.getName();
-        }
+        return rust ? RustHelper.mapType(type) : type.getName();
     }
 
     public String ptr(ITypeBinding b) {
         String s = str(b);
         if (!b.isPrimitive()) {
-            s = s + "*";
+            s += "*";
         }
         return s;
     }
 
     public String ptr(CType b) {
-        String s = b.toString();
-        s = s + "*";
-        return s;
+        return b + "*";
     }
 
+    @Override
     public String toString() {
         return sb.toString();
     }
 
+    // Getters and setters for `usings` if needed
+    public List<String> getUsings() {
+        return usings;
+    }
 }
